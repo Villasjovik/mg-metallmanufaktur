@@ -112,9 +112,11 @@ function initLogo3D(container) {
 
   scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 
-  // Lights — strong key from upper right corner
-  scene.add(new THREE.AmbientLight(0xfff8f0, 0.7));
-  const keyLight = new THREE.DirectionalLight(0xfff2e0, 6.0);
+  // Per-logo illumination preserves the original material colour without a backdrop.
+  // Containers without overrides keep the canonical Villa Sjövik lighting.
+  const lightColor = container.dataset.lightColor ? hexInt(container.dataset.lightColor) : null;
+  scene.add(new THREE.AmbientLight(lightColor ?? 0xfff8f0, parseFloat(container.dataset.ambientIntensity || '0.7')));
+  const keyLight = new THREE.DirectionalLight(lightColor ?? 0xfff2e0, parseFloat(container.dataset.keyIntensity || '6.0'));
   keyLight.position.set(900, 800, 500); // strong upper-right-front
   keyLight.castShadow = hasShadow;
   if (hasShadow) {
@@ -131,11 +133,11 @@ function initLogo3D(container) {
   }
   scene.add(keyLight);
   // Soft fill from lower left — gives shape without flattening shadows
-  const fillLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+  const fillLight = new THREE.DirectionalLight(lightColor ?? 0xffeedd, parseFloat(container.dataset.fillIntensity || '1.2'));
   fillLight.position.set(-500, -200, 400);
   scene.add(fillLight);
   // Rim from upper-left-back for edge definition
-  const rimLight = new THREE.DirectionalLight(0xffffff, 1.8);
+  const rimLight = new THREE.DirectionalLight(lightColor ?? 0xffffff, parseFloat(container.dataset.rimIntensity || '1.8'));
   rimLight.position.set(-400, 400, -600);
   scene.add(rimLight);
 
@@ -262,7 +264,9 @@ function initLogo3D(container) {
       for (const shape of SVGLoader.createShapes(path)) {
         const mesh = new THREE.Mesh(
           new THREE.ExtrudeGeometry(shape, {
-            depth, bevelEnabled:true, bevelThickness:3, bevelSize:1.8, bevelSegments:6
+            depth, bevelEnabled:true,
+            bevelThickness:parseFloat(container.dataset.bevelThickness || '3'),
+            bevelSize:parseFloat(container.dataset.bevelSize || '1.8'), bevelSegments:6
           }),
           [pathFront, pathBevel]
         );
@@ -275,29 +279,6 @@ function initLogo3D(container) {
         mesh.renderOrder = pathIdx;
         logo.add(mesh);
       }
-    });
-
-    // Preserve official raster variants pixel-for-pixel on an extruded SVG plate.
-    // The image and plate share the centered pivot, fit, spin and floor logic.
-    data.xml.querySelectorAll('image').forEach((image, imageIdx) => {
-      const texture = new THREE.TextureLoader().load(image.getAttribute('href'), undefined, undefined, err => {
-        console.warn('[logo3d] Logo image could not be loaded:', err);
-        container.classList.add('logo3d-failed');
-      });
-      texture.colorSpace = THREE.SRGBColorSpace;
-      texture.flipY = false; // The whole SVG group flips Y below.
-      const width = parseFloat(image.getAttribute('width'));
-      const height = parseFloat(image.getAttribute('height'));
-      const gap = parseFloat(container.dataset.layerGap) || 0.5;
-      const geometry = new THREE.PlaneGeometry(width, height);
-      geometry.translate(parseFloat(image.getAttribute('x')) + width / 2,
-        parseFloat(image.getAttribute('y')) + height / 2,
-        depth + 3 + (imageIdx + 1) * gap);
-      const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
-        map: texture, toneMapped: false, side: THREE.DoubleSide
-      }));
-      mesh.renderOrder = data.paths.length + imageIdx;
-      logo.add(mesh);
     });
 
     // CENTERING FIX: translate actual geometry vertices, not mesh.position
